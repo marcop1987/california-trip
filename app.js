@@ -281,7 +281,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Gestione click sul pulsante di Login
   loginBtn.addEventListener('click', async () => {
     loginBtn.innerText = 'Reindirizzamento...';
-    await sb.auth.signInWithOAuth({ provider: 'google' });
+    await sb.auth.signInWithOAuth({ 
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname
+      }
+    });
   });
 
   // Controlla se l'utente è già loggato
