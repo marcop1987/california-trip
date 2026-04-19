@@ -4,7 +4,7 @@ const SUPABASE_ANON = 'sb_publishable_zEyuXaWRYbDvh9HqPhYDTA_5XggY_mn';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const ALLOWED_EMAILS = ['marco.pastore87@gmail.com', 'catebuffa@gmail.com'];
-const CSV_FILE = 'California 2026 - Calendario.csv';
+const CSV_FILE = 'https://docs.google.com/spreadsheets/d/1SMHpzRTFtoo7qhWWKOH-2yMME4Y1ulUJ5NXS7y0nRtM/export?format=csv';
 
 let map, tripData = [], directionsService, directionsRenderer, dayDirectionsRenderer;
 let placesService, geocoder;
@@ -111,12 +111,20 @@ function renderTimeline() {
     card.className = 'day-card';
     card.id = `day-card-${day.Day}`;
 
+    // Costruisci il contenuto dai 4 slot orari
+    const timeSlots = [
+      { label: '🌅 Mattina', key: 'Mattina' },
+      { label: '☀️ Pomeriggio', key: 'Pomeriggio' },
+      { label: '🌙 Sera', key: 'Sera' },
+      { label: '📌 Opzionale', key: 'Opzionale' },
+    ];
     let contentHTML = '';
-    if (day['Cosa Vedere'] && day['Cosa Vedere'] !== '-') {
-      contentHTML = day['Cosa Vedere'].replace(/\n/g, '<br>');
-    } else {
-      contentHTML = '<span style="color:var(--text-muted)">Nessuna attività programmata o in viaggio.</span>';
-    }
+    timeSlots.forEach(slot => {
+      if (day[slot.key] && day[slot.key].trim() !== '' && day[slot.key] !== '-') {
+        contentHTML += `<div class="time-slot"><span class="time-label">${slot.label}:</span> ${day[slot.key]}</div>`;
+      }
+    });
+    if (!contentHTML) contentHTML = '<span style="color:var(--text-muted)">Nessuna attività programmata.</span>';
 
     const hotelHTML = day.Pernotto && day.Pernotto.trim() !== ''
       ? `<div class="hotel-badge">🏨 ${day.Pernotto}</div>` : '';
@@ -242,26 +250,28 @@ async function focusDayTour(day) {
   poiMarkers = [];
   if (dayDirectionsRenderer) dayDirectionsRenderer.setDirections({ routes: [] });
 
-  const text = day['Cosa Vedere'];
-  if (!text || text === '-') {
-    let city = day.Arrivo;
-    if (city.includes('-')) city = city.split('-')[1].trim();
-    geocoder.geocode({ address: city + ', CA, USA' }, (results, status) => {
-      if (status === 'OK' && results[0]) { map.setZoom(12); map.panTo(results[0].geometry.location); }
-    });
-    return;
-  }
-
-  let lines = text.split('\n');
-  let queries = [];
-  lines.forEach(line => {
-    let cleanLine = line.replace(/Mattina:|Pomeriggio:|Sera:|Opzionale:/g, '').trim();
-    if (cleanLine.length > 3) {
-      let place = cleanLine.split('(')[0].split(',')[0].split('—')[0].trim();
-      if (place.length > 2) queries.push(place);
+  // Estrai POI dalle 4 colonne orarie in ordine cronologico
+  const queries = [];
+  ['Mattina', 'Pomeriggio', 'Sera', 'Opzionale'].forEach(slot => {
+    if (day[slot] && day[slot].trim() !== '' && day[slot] !== '-') {
+      day[slot].split(',').forEach(poi => {
+        const clean = poi.trim().split('(')[0].trim();
+        if (clean.length > 2) queries.push(clean);
+      });
     }
   });
-  if (queries.length === 0) return;
+
+  if (queries.length === 0) {
+    // Nessun POI: zoom sulla città di arrivo
+    let city = day.Arrivo || '';
+    if (city.includes('-')) city = city.split('-')[1].trim();
+    if (city && city !== 'Monaco') {
+      geocoder.geocode({ address: city + ', CA, USA' }, (results, status) => {
+        if (status === 'OK' && results[0]) { map.setZoom(12); map.panTo(results[0].geometry.location); }
+      });
+    }
+    return;
+  }
 
   let city = day.Arrivo.includes('-') ? day.Arrivo.split('-')[1].trim() : day.Arrivo;
   const bounds = new google.maps.LatLngBounds();
