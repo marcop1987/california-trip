@@ -39,16 +39,13 @@ Formattazione richiesta: DEVI rispondere rigorosamente in formato JSON con la ch
 `
 
     // Effettuiamo la chiamata sicura verso Gemini 1.5 Flash
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
+        contents: [{ parts: [{ text: prompt }] }]
       })
     })
 
@@ -60,10 +57,12 @@ Formattazione richiesta: DEVI rispondere rigorosamente in formato JSON con la ch
     }
 
     // Estraiamo il testo della risposta
-    const textResponse = data.candidates[0].content.parts[0].text
+    const rawText = data.candidates[0].content.parts[0].text
     
-    // Parsiamo il JSON restituito da Gemini
-    const jsonResponse = JSON.parse(textResponse)
+    // Estrai il JSON dalla risposta (che potrebbe contenere markdown/backtick)
+    const jsonMatch = rawText.match(/{[\s\S]*}/)
+    if (!jsonMatch) throw new Error('Risposta AI non valida: JSON non trovato.')
+    const jsonResponse = JSON.parse(jsonMatch[0])
 
     // Rimandiamo il suggerimento al frontend (app.js)
     return new Response(
