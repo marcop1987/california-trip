@@ -175,7 +175,7 @@ function focusDayTour(day) {
   }
 
   // Estrazione "intelligente" dei luoghi
-  let lines = text.split('\\n');
+  let lines = text.split('\n');
   let queries = [];
   lines.forEach(line => {
     // Rimuovi parole superflue (Mattina:, Pomeriggio:, etc.)
