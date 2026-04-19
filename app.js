@@ -4,7 +4,7 @@ const SUPABASE_ANON = 'sb_publishable_zEyuXaWRYbDvh9HqPhYDTA_5XggY_mn';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // LE TUE EMAIL AUTORIZZATE (modifica l'elenco se necessario)
-const ALLOWED_EMAILS = ['marcop1987@gmail.com', 'tuocompagno@gmail.com'];
+const ALLOWED_EMAILS = ['marco.pastore87@gmail.com', 'catebuffa@gmail.com'];
 
 const CSV_FILE = 'California 2026 - Calendario.csv';
 let map;
