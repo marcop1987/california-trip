@@ -236,36 +236,35 @@ function focusDayTour(day) {
   });
 }
 
-// AI Optimizer Logic
-function analyzeItinerary() {
+// AI Optimizer Logic tramite Gemini API (Supabase Edge Functions)
+async function analyzeItinerary() {
   const optimizerEl = document.getElementById('ai-optimizer');
   const msgEl = document.getElementById('ai-msg');
   const actionsEl = document.getElementById('ai-actions');
+  
   optimizerEl.classList.remove('hidden');
+  msgEl.innerHTML = '<div class="loading" style="font-size:13px;">Gemini sta analizzando la logistica del tuo percorso... 🧠</div>';
+  actionsEl.classList.add('hidden'); // Nascondiamo le azioni perché il suggerimento è solo testuale
   
-  const hasModesto = tripData.some(d => d.Arrivo && d.Arrivo.includes('Modesto') && d['Cosa Vedere'] && d['Cosa Vedere'].includes('Yosemite'));
-  
-  setTimeout(() => {
-    if (hasModesto) {
-      msgEl.innerHTML = `Ho notato che il Giorno 4 parti da Fresno per vedere <strong>Yosemite</strong> e poi dormi a <strong>Modesto</strong>. Ti suggerirei di cercare un pernotto a <em>Mariposa</em> o <em>El Portal</em> per risparmiare guida. Vuoi aggiornare la tappa?`;
-      actionsEl.classList.remove('hidden');
-    } else {
-      msgEl.innerHTML = "Il tuo itinerario è ottimizzato alla perfezione! Le distanze di guida sono bilanciate.";
-    }
-  }, 1500);
-}
+  try {
+    // Chiamata sicura alla nostra Edge Function appena creata
+    const { data, error } = await sb.functions.invoke('gemini-optimizer', {
+      body: { tripData: tripData }
+    });
 
-function acceptOptimization() {
-  document.getElementById('ai-msg').innerHTML = "<span style='color:var(--success)'>Ottimo! Tappa aggiornata a Mariposa. Mappa in ricalcolo...</span>";
-  document.getElementById('ai-actions').classList.add('hidden');
-  const modestoDay = Array.from(document.querySelectorAll('.day-route')).find(el => el.textContent.includes('Modesto'));
-  if(modestoDay) modestoDay.innerHTML = modestoDay.innerHTML.replace('Modesto', 'Mariposa');
-  
-  tripData.forEach(d => {
-    if(d.Arrivo === 'Modesto') d.Arrivo = 'Mariposa';
-    if(d.Partenza === 'Modesto') d.Partenza = 'Mariposa';
-  });
-  plotRouteOnMap();
+    if (error) {
+      throw error;
+    }
+    
+    if (data && data.suggestion) {
+      msgEl.innerHTML = `<strong style="color:var(--accent)">Consiglio di Gemini:</strong><br>${data.suggestion}`;
+    } else {
+      msgEl.innerHTML = "L'intelligenza artificiale non ha trovato ottimizzazioni particolari. Il tuo itinerario sembra perfetto!";
+    }
+  } catch (err) {
+    console.error("Errore AI:", err);
+    msgEl.innerHTML = "<span style='color:var(--warning)'>Ops, l'IA è momentaneamente offline. Riprova più tardi.</span>";
+  }
 }
 
 function dismissOptimization() {
