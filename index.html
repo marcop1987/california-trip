@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>California Trip Planner</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Google Maps script added dynamically in app.js or placed at bottom -->
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Sidebar / Timeline Area -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1 class="logo">🌴 CaliTrip 2026</h1>
+      <p class="subtitle">Il tuo itinerario ottimizzato</p>
+    </div>
+    
+    <div class="ai-optimizer hidden" id="ai-optimizer">
+      <div class="ai-header">
+        <span class="ai-icon">✨</span>
+        <span class="ai-title">Suggerimento di Ottimizzazione</span>
+      </div>
+      <p class="ai-text" id="ai-msg">Analizzando il tuo itinerario...</p>
+      <div class="ai-actions hidden" id="ai-actions">
+        <button class="btn btn-primary" onclick="acceptOptimization()">Accetta</button>
+        <button class="btn btn-secondary" onclick="dismissOptimization()">Ignora</button>
+      </div>
+    </div>
+
+    <div class="timeline" id="timeline">
+      <div class="loading">Caricamento itinerario in corso...</div>
+    </div>
+  </aside>
+
+  <!-- Main Map Area -->
+  <main class="map-container">
+    <div id="map"></div>
+  </main>
+
+  <!-- PapaParse for CSV reading -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  
+  <!-- Google Maps JS API -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDUl7r8E1Nh2wKT2GosmF5UWoZz97VctTA&libraries=places"></script>
+  
+  <!-- Custom JS -->
+  <script src="app.js"></script>
+
+</body>
+</html>
