@@ -39,7 +39,7 @@ Formattazione richiesta: DEVI rispondere rigorosamente in formato JSON con la ch
 `
 
     // Effettuiamo la chiamata sicura verso Gemini 1.5 Flash
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
