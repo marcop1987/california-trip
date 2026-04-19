@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>California Trip Planner</title>
+  <title>CaliTrip 2026 - Il tuo itinerario in California</title>
+  <meta name="description" content="Pianifica il tuo road trip in California con mappa interattiva e suggerimenti AI.">
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Google Maps script added dynamically in app.js or placed at bottom -->
   
   <!-- Custom CSS -->
   <link rel="stylesheet" href="style.css">
@@ -30,14 +29,28 @@
   <!-- Sidebar / Timeline Area -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <h1 class="logo">🌴 CaliTrip 2026</h1>
-      <p class="subtitle">Il tuo itinerario ottimizzato</p>
+      <div>
+        <h1 class="logo">🌴 CaliTrip 2026</h1>
+        <p class="subtitle">Il tuo itinerario ottimizzato</p>
+      </div>
+      <div class="user-info">
+        <span id="user-email-display" class="user-email"></span>
+        <button id="logout-btn" class="btn-logout" title="Esci">⏏</button>
+      </div>
     </div>
     
+    <!-- Legend -->
+    <div class="map-legend">
+      <span class="legend-item"><span class="dot blue"></span>Percorso principale</span>
+      <span class="legend-item"><span class="dot amber"></span>Tour del giorno</span>
+      <span class="legend-item"><span class="dot purple"></span>Hotel</span>
+    </div>
+
     <div class="ai-optimizer hidden" id="ai-optimizer">
       <div class="ai-header">
         <span class="ai-icon">✨</span>
         <span class="ai-title">Suggerimento di Ottimizzazione</span>
+        <button onclick="dismissOptimization()" class="dismiss-btn">✕</button>
       </div>
       <p class="ai-text" id="ai-msg">Analizzando il tuo itinerario...</p>
       <div class="ai-actions hidden" id="ai-actions">
@@ -48,6 +61,21 @@
 
     <div class="timeline" id="timeline">
       <div class="loading">Caricamento itinerario in corso...</div>
+    </div>
+
+    <!-- Chat Gemini -->
+    <div class="chat-section" id="chat-section">
+      <div class="chat-header">
+        <span class="ai-icon">💬</span>
+        <span class="ai-title">Chatta con Gemini</span>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg assistant">Ciao! Sono Gemini 🤖 Hai domande sul tuo viaggio in California? Chiedi pure!</div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Es: Quale giorno è più impegnativo?" />
+        <button id="chat-send-btn" onclick="sendChatMessage()">➤</button>
+      </div>
     </div>
   </aside>
 
