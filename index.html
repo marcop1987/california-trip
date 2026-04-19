@@ -17,6 +17,16 @@
 </head>
 <body>
 
+  <!-- Auth Overlay -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-box">
+      <h2>🌴 CaliTrip 2026</h2>
+      <p>Questa mappa è privata. Effettua il login per vedere l'itinerario.</p>
+      <button id="login-btn" class="btn btn-primary" style="margin-top:20px; width:100%; font-size:14px; padding:12px;">Accedi con Google</button>
+      <div id="auth-error" class="auth-error hidden">Accesso negato. Non sei autorizzato.</div>
+    </div>
+  </div>
+
   <!-- Sidebar / Timeline Area -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
@@ -45,6 +55,9 @@
   <main class="map-container">
     <div id="map"></div>
   </main>
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- PapaParse for CSV reading -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>

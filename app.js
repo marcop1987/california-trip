@@ -1,3 +1,11 @@
+// Configurazione Supabase
+const SUPABASE_URL = 'https://exlxayhnvglugcdpfdlg.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_zEyuXaWRYbDvh9HqPhYDTA_5XggY_mn';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// LE TUE EMAIL AUTORIZZATE (modifica l'elenco se necessario)
+const ALLOWED_EMAILS = ['marcop1987@gmail.com', 'tuocompagno@gmail.com'];
+
 const CSV_FILE = 'California 2026 - Calendario.csv';
 let map;
 let tripData = [];
@@ -264,8 +272,40 @@ function dismissOptimization() {
   document.getElementById('ai-optimizer').classList.add('hidden');
 }
 
-// Boot up
-document.addEventListener('DOMContentLoaded', () => {
-  initMap();
-  loadData();
+// Boot up e Autenticazione
+document.addEventListener('DOMContentLoaded', async () => {
+  const loginBtn = document.getElementById('login-btn');
+  const authOverlay = document.getElementById('auth-overlay');
+  const authError = document.getElementById('auth-error');
+
+  // Gestione click sul pulsante di Login
+  loginBtn.addEventListener('click', async () => {
+    loginBtn.innerText = 'Reindirizzamento...';
+    await sb.auth.signInWithOAuth({ provider: 'google' });
+  });
+
+  // Controlla se l'utente è già loggato
+  const { data: { session } } = await sb.auth.getSession();
+  
+  if (session) {
+    const userEmail = session.user.email;
+    
+    // Controllo Sicurezza: Allowlist
+    if (ALLOWED_EMAILS.includes(userEmail)) {
+      authOverlay.classList.add('hidden'); // Nascondi il blocco
+      initMap();
+      loadData();
+    } else {
+      authError.classList.remove('hidden');
+      authError.innerText = "Accesso Negato. L'email " + userEmail + " non fa parte della lista autorizzata.";
+      await sb.auth.signOut(); // Disconnetti l'intruso
+    }
+  } else {
+    // Se non c'è sessione, controlla se c'è un evento di login in corso dal redirect di Google
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        window.location.reload(); // Ricarica la pagina per far scattare il controllo Allowlist
+      }
+    });
+  }
 });
