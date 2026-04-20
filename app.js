@@ -7,6 +7,7 @@ const ALLOWED_EMAILS = ['marco.pastore87@gmail.com', 'catebuffa@gmail.com'];
 const CSV_FILE = 'https://docs.google.com/spreadsheets/d/1SMHpzRTFtoo7qhWWKOH-2yMME4Y1ulUJ5NXS7y0nRtM/export?format=csv';
 
 let map, tripData = [], directionsService, directionsRenderer, dayDirectionsRenderer;
+let currentDayPolylines = [];
 let placesService, geocoder;
 let poiMarkers = [], hotelMarkers = [];
 
@@ -245,93 +246,248 @@ async function fetchWeather(day, el) {
   });
 }
 
+// Geocode un indirizzo e restituisce una LatLng Promise
+function geocodeAddress(address) {
+  return new Promise(resolve => {
+    geocoder.geocode({ address }, (results, status) => {
+      resolve(status === 'OK' && results[0] ? results[0].geometry.location : null);
+    });
+  });
+}
+
+// Cerca un POI con Places e restituisce { name, location } o null
+function searchPlace(query, city) {
+  return new Promise(resolve => {
+    placesService.textSearch({ query: query + ', ' + city + ', CA' }, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+        resolve({ name: results[0].name, location: results[0].geometry.location, photos: results[0].photos });
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
+// Calcola distanza/tempo tra due waypoints con DirectionsService
+function calcLeg(origin, destination) {
+  return new Promise(resolve => {
+    directionsService.route({
+      origin, destination,
+      travelMode: google.maps.TravelMode.DRIVING
+    }, (result, status) => {
+      if (status === 'OK' && result.routes[0] && result.routes[0].legs[0]) {
+        const leg = result.routes[0].legs[0];
+        resolve({ distance: leg.distance, duration: leg.duration });
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
 async function focusDayTour(day) {
+  // Pulisci stato precedente
   poiMarkers.forEach(m => m.setMap(null));
   poiMarkers = [];
+  currentDayPolylines.forEach(p => p.setMap(null));
+  currentDayPolylines = [];
   if (dayDirectionsRenderer) dayDirectionsRenderer.setDirections({ routes: [] });
 
-  // Estrai POI dalle 4 colonne orarie in ordine cronologico
-  const queries = [];
+  const dayIndex = tripData.findIndex(d => d.Day === day.Day);
+  
+  // 1. Identifica Punto di Partenza (Hotel precedente o Partenza CSV)
+  let startAddr = day.Partenza || '';
+  if (dayIndex > 0 && tripData[dayIndex - 1].Pernotto) {
+    startAddr = tripData[dayIndex - 1].Pernotto;
+  }
+  const startLoc = await geocodeAddress(startAddr + (startAddr.includes('CA') ? '' : ', CA, USA'));
+
+  // 2. Identifica Punto di Arrivo (Pernotto o Arrivo CSV)
+  let endAddr = day.Pernotto || day.Arrivo || '';
+  const endLoc = await geocodeAddress(endAddr + (endAddr.includes('CA') ? '' : ', CA, USA'));
+
+  // 3. Raccogli tappe intermedie (POI + Partenza/Arrivo se diversi dagli hotel)
+  const intermediateQueries = [];
+  
+  // Se la partenza CSV è diversa dallo startAddr (hotel), aggiungila come tappa
+  if (day.Partenza && day.Partenza !== startAddr) intermediateQueries.push(day.Partenza);
+
   ['Mattina', 'Pomeriggio', 'Sera', 'Opzionale'].forEach(slot => {
     if (day[slot] && day[slot].trim() !== '' && day[slot] !== '-') {
       day[slot].split(',').forEach(poi => {
         const clean = poi.trim().split('(')[0].trim();
-        if (clean.length > 2) queries.push(clean);
+        if (clean.length > 2) intermediateQueries.push(clean);
       });
     }
   });
 
-  if (queries.length === 0) {
-    // Nessun POI: zoom sulla città di arrivo
-    let city = day.Arrivo || '';
-    if (city.includes('-')) city = city.split('-')[1].trim();
-    if (city && city !== 'Monaco') {
-      geocoder.geocode({ address: city + ', CA, USA' }, (results, status) => {
-        if (status === 'OK' && results[0]) { map.setZoom(12); map.panTo(results[0].geometry.location); }
-      });
-    }
+  // Se l'arrivo CSV è diverso dall'endAddr (hotel pernotto), aggiungilo come tappa
+  if (day.Arrivo && day.Arrivo !== endAddr) intermediateQueries.push(day.Arrivo);
+
+  let city = (day.Arrivo || '').includes('-') ? day.Arrivo.split('-')[1].trim() : (day.Arrivo || '');
+
+  // Risolvi tutte le tappe intermedie
+  const intermediateResults = [];
+  for (const query of [...new Set(intermediateQueries)]) {
+    const res = await searchPlace(query, city);
+    if (res) intermediateResults.push({ ...res, query });
+  }
+
+  if (!startLoc || !endLoc) {
+    console.error("Impossibile determinare inizio o fine percorso");
     return;
   }
 
-  let city = day.Arrivo.includes('-') ? day.Arrivo.split('-')[1].trim() : day.Arrivo;
-  const bounds = new google.maps.LatLngBounds();
-  const foundLocations = [];
+  // 4. Ottimizza il percorso tra startLoc e endLoc passando per le tappe intermedie
+  const routeRequest = {
+    origin: startLoc,
+    destination: endLoc,
+    waypoints: intermediateResults.map(res => ({ location: res.location, stopover: true })),
+    optimizeWaypoints: true,
+    travelMode: google.maps.TravelMode.DRIVING,
+    unitSystem: google.maps.UnitSystem.METRIC
+  };
 
-  const promises = queries.map((query, i) => {
-    return new Promise(resolve => {
-      placesService.textSearch({ query: query + ', ' + city + ', CA' }, (results, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
-          const place = results[0];
-          const photoUrl = place.photos && place.photos.length > 0
-            ? place.photos[0].getUrl({ maxWidth: 300 }) : null;
+  directionsService.route(routeRequest, async (result, status) => {
+    if (status !== 'OK') {
+      console.error("Errore ottimizzazione percorso:", status);
+      return;
+    }
 
-          const marker = new google.maps.Marker({
-            map: map,
-            position: place.geometry.location,
-            title: place.name,
-            label: { text: String(i + 1), color: '#0f172a', fontWeight: 'bold', fontSize: '11px' },
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              fillColor: '#f59e0b', fillOpacity: 1,
-              strokeColor: '#fff', strokeWeight: 2, scale: 13
-            }
-          });
+    const route = result.routes[0];
+    const order = route.waypoint_order; // Indici dei waypoints nell'ordine ottimale
 
-          let infoContent = `<div style="color:#0f172a;padding:5px;max-width:220px;">`;
-          if (photoUrl) infoContent += `<img src="${photoUrl}" style="width:100%;border-radius:6px;margin-bottom:6px;display:block;">`;
-          infoContent += `<strong>${place.name}</strong><br><small style="color:#64748b;">${query}</small></div>`;
+    // Costruisci la sequenza finale ottimizzata
+    const sequence = [];
+    sequence.push({ label: 'Partenza: ' + startAddr, location: startLoc, isHotel: true });
+    
+    order.forEach(idx => {
+      const poi = intermediateResults[idx];
+      sequence.push({ label: poi.name, location: poi.location, isHotel: false, photos: poi.photos, query: poi.query });
+    });
 
-          const iw = new google.maps.InfoWindow({ content: infoContent });
-          marker.addListener('click', () => iw.open(map, marker));
-          poiMarkers.push(marker);
-          bounds.extend(place.geometry.location);
-          foundLocations[i] = place.geometry.location;
+    sequence.push({ label: 'Arrivo: ' + endAddr, location: endLoc, isHotel: true });
+
+    // 5. Metti i Markers
+    const bounds = new google.maps.LatLngBounds();
+    sequence.forEach((stop, i) => {
+      const isEndpoint = i === 0 || i === sequence.length - 1;
+      const color = isEndpoint ? '#8b5cf6' : '#f59e0b';
+      
+      const marker = new google.maps.Marker({
+        map,
+        position: stop.location,
+        label: isEndpoint ? undefined : { text: String(i), color: '#0f172a', fontWeight: 'bold', fontSize: '11px' },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: color, fillOpacity: 1,
+          strokeColor: '#fff', strokeWeight: 2,
+          scale: isEndpoint ? 9 : 13
         }
-        resolve();
       });
+
+      let infoContent = `<div style="color:#0f172a;padding:5px;max-width:220px;">`;
+      if (stop.photos && stop.photos.length > 0) {
+        infoContent += `<img src="${stop.photos[0].getUrl({ maxWidth: 300 })}" style="width:100%;border-radius:6px;margin-bottom:6px;display:block;">`;
+      }
+      infoContent += `<strong>${stop.label}</strong></div>`;
+      const iw = new google.maps.InfoWindow({ content: infoContent });
+      marker.addListener('click', () => iw.open(map, marker));
+      poiMarkers.push(marker);
+      bounds.extend(stop.location);
     });
-  });
 
-  await Promise.all(promises);
-
-  if (!bounds.isEmpty()) {
     map.fitBounds(bounds);
-    if (map.getZoom() > 15) map.setZoom(15);
-  }
+    if (map.getZoom() > 14) map.setZoom(14);
 
-  // Traccia percorso ordinato tra i POI trovati
-  const validLocations = foundLocations.filter(Boolean);
-  if (validLocations.length >= 2) {
-    const routeRequest = {
-      origin: validLocations[0],
-      destination: validLocations[validLocations.length - 1],
-      waypoints: validLocations.slice(1, -1).map(loc => ({ location: loc, stopover: true })),
-      travelMode: google.maps.TravelMode.DRIVING
-    };
-    directionsService.route(routeRequest, (result, status) => {
-      if (status === 'OK') dayDirectionsRenderer.setDirections(result);
+    // 6. Calcola e disegna i tratti (legs)
+    let totalMeters = 0;
+    let totalSeconds = 0;
+    const finalLegs = [];
+
+    // Usiamo le "legs" fornite dal risultato ottimizzato di Google
+    route.legs.forEach((leg, i) => {
+      totalMeters += leg.distance.value;
+      totalSeconds += leg.duration.value;
+      
+      finalLegs.push({
+        from: sequence[i].label,
+        to: sequence[i+1].label,
+        distText: leg.distance.text,
+        durText: leg.duration.text,
+        path: leg.steps.flatMap(s => s.path)
+      });
+
+      const colors = ['#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981'];
+      const poly = new google.maps.Polyline({
+        path: leg.steps.flatMap(s => s.path),
+        map,
+        strokeColor: colors[i % colors.length],
+        strokeWeight: 4, strokeOpacity: 0.9,
+        geodesic: true
+      });
+      
+      poly.addListener('click', () => highlightLegPanel(i));
+      poly.addListener('mouseover', () => poly.setOptions({ strokeWeight: 7, strokeOpacity: 1 }));
+      poly.addListener('mouseout', () => poly.setOptions({ strokeWeight: 4, strokeOpacity: 0.9 }));
+      currentDayPolylines.push(poly);
     });
-  }
+
+    renderRoutePanel(day.Day, finalLegs, totalMeters, totalSeconds);
+  });
+}
+
+function highlightLegPanel(index) {
+  document.querySelectorAll('.route-leg').forEach((el, i) => {
+    el.classList.toggle('active-leg', i === index);
+  });
+}
+
+function renderRoutePanel(dayNum, legs, totalMeters, totalSeconds) {
+  const card = document.getElementById(`day-card-${dayNum}`);
+  if (!card) return;
+
+  // Rimuovi pannello precedente se esiste
+  const existing = card.querySelector('.route-panel');
+  if (existing) existing.remove();
+
+  const totalKm = (totalMeters / 1000).toFixed(1);
+  const totalH = Math.floor(totalSeconds / 3600);
+  const totalMin = Math.round((totalSeconds % 3600) / 60);
+  const totalTimeStr = totalH > 0 ? `${totalH}h ${totalMin}min` : `${totalMin}min`;
+
+  let legsHTML = legs.map((leg, i) => {
+    const fromShort = leg.from.replace('Partenza: ', '').replace('Arrivo: ', '').split(',')[0];
+    const toShort = leg.to.replace('Partenza: ', '').replace('Arrivo: ', '').split(',')[0];
+    const isStart = leg.from.includes('Partenza');
+    const isEnd = leg.to.includes('Arrivo');
+
+    return `
+      <div class="route-leg" id="leg-${dayNum}-${i}" onclick="highlightLegPanel(${i})">
+        <div class="leg-stops">
+          <span class="leg-from">${isStart ? '🏨' : '📍'} ${fromShort}</span>
+          <span class="leg-arrow">→</span>
+          <span class="leg-to">${isEnd ? '🏨' : '📍'} ${toShort}</span>
+        </div>
+        <div class="leg-meta">
+          <span class="leg-dist">🛣 ${leg.distText}</span>
+          <span class="leg-dur">⏱ ${leg.durText}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  const panel = document.createElement('div');
+  panel.className = 'route-panel';
+  panel.innerHTML = `
+    <div class="route-panel-header">🗺 Itinerario Ottimizzato</div>
+    ${legsHTML}
+    <div class="route-total">
+      <div class="total-km">📏 Km Giornalieri: ${totalKm} km</div>
+      <div class="total-time">⏱ Guida Totale: ~${totalTimeStr}</div>
+    </div>
+  `;
+
+  card.appendChild(panel);
 }
 
 // AI Optimizer Logic tramite Gemini API
