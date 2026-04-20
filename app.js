@@ -295,50 +295,52 @@ async function focusDayTour(day) {
 
   const dayIndex = tripData.findIndex(d => d.Day === day.Day);
   
-  // 1. Identifica Punto di Partenza (Hotel precedente o Partenza CSV)
+  // 1. Identifica Hotel di Partenza e Arrivo
   let startAddr = day.Partenza || '';
   if (dayIndex > 0 && tripData[dayIndex - 1].Pernotto) {
     startAddr = tripData[dayIndex - 1].Pernotto;
   }
   const startLoc = await geocodeAddress(startAddr + (startAddr.includes('CA') ? '' : ', CA, USA'));
 
-  // 2. Identifica Punto di Arrivo (Pernotto o Arrivo CSV)
   let endAddr = day.Pernotto || day.Arrivo || '';
   const endLoc = await geocodeAddress(endAddr + (endAddr.includes('CA') ? '' : ', CA, USA'));
 
-  // 3. Raccogli tappe intermedie (POI + Partenza/Arrivo se diversi dagli hotel)
-  const intermediateQueries = [];
-  
-  // Se la partenza CSV è diversa dallo startAddr (hotel), aggiungila come tappa
-  if (day.Partenza && day.Partenza !== startAddr) intermediateQueries.push(day.Partenza);
+  if (!startLoc || !endLoc) return;
 
+  // 2. Raccogli tappe intermedie dai 4 slot orari
+  const intermediateQueries = [];
   ['Mattina', 'Pomeriggio', 'Sera', 'Opzionale'].forEach(slot => {
     if (day[slot] && day[slot].trim() !== '' && day[slot] !== '-') {
       day[slot].split(',').forEach(poi => {
-        const clean = poi.trim().split('(')[0].trim();
-        if (clean.length > 2) intermediateQueries.push(clean);
+        const clean = poi.trim();
+        // Filtra note, descrizioni lunghe o istruzioni di viaggio
+        if (clean.length > 2 && clean.length < 60 && 
+            !clean.toLowerCase().startsWith('viaggio') && 
+            !clean.toLowerCase().startsWith('giornata') &&
+            !clean.toLowerCase().startsWith('ritorno')) {
+          intermediateQueries.push(clean.split('(')[0].trim());
+        }
       });
     }
   });
 
-  // Se l'arrivo CSV è diverso dall'endAddr (hotel pernotto), aggiungilo come tappa
-  if (day.Arrivo && day.Arrivo !== endAddr) intermediateQueries.push(day.Arrivo);
+  const city = (day.Arrivo || '').includes('-') ? day.Arrivo.split('-')[1].trim() : (day.Arrivo || '');
 
-  let city = (day.Arrivo || '').includes('-') ? day.Arrivo.split('-')[1].trim() : (day.Arrivo || '');
-
-  // Risolvi tutte le tappe intermedie
+  // Risolvi le tappe
   const intermediateResults = [];
   for (const query of [...new Set(intermediateQueries)]) {
     const res = await searchPlace(query, city);
-    if (res) intermediateResults.push({ ...res, query });
+    if (res) {
+      // Evita tappe che coincidono quasi esattamente con l'inizio o la fine
+      const distStart = google.maps.geometry.spherical.computeDistanceBetween(res.location, startLoc);
+      const distEnd = google.maps.geometry.spherical.computeDistanceBetween(res.location, endLoc);
+      if (distStart > 500 && distEnd > 500) {
+        intermediateResults.push({ ...res, query });
+      }
+    }
   }
 
-  if (!startLoc || !endLoc) {
-    console.error("Impossibile determinare inizio o fine percorso");
-    return;
-  }
-
-  // 4. Ottimizza il percorso tra startLoc e endLoc passando per le tappe intermedie
+  // 3. Ottimizza il percorso
   const routeRequest = {
     origin: startLoc,
     destination: endLoc,
@@ -349,50 +351,34 @@ async function focusDayTour(day) {
   };
 
   directionsService.route(routeRequest, async (result, status) => {
-    if (status !== 'OK') {
-      console.error("Errore ottimizzazione percorso:", status);
-      return;
-    }
+    if (status !== 'OK') return;
 
     const route = result.routes[0];
-    const order = route.waypoint_order; // Indici dei waypoints nell'ordine ottimale
+    const order = route.waypoint_order;
 
-    // Costruisci la sequenza finale ottimizzata
     const sequence = [];
-    sequence.push({ label: 'Partenza: ' + startAddr, location: startLoc, isHotel: true });
+    sequence.push({ label: '🏨 ' + startAddr, location: startLoc, isHotel: true });
     
     order.forEach(idx => {
       const poi = intermediateResults[idx];
-      sequence.push({ label: poi.name, location: poi.location, isHotel: false, photos: poi.photos, query: poi.query });
+      sequence.push({ label: '📍 ' + poi.name, location: poi.location, isHotel: false, photos: poi.photos });
     });
 
-    sequence.push({ label: 'Arrivo: ' + endAddr, location: endLoc, isHotel: true });
+    sequence.push({ label: '🏨 ' + endAddr, location: endLoc, isHotel: true });
 
-    // 5. Metti i Markers
+    // 4. Markers e Visualizzazione
     const bounds = new google.maps.LatLngBounds();
     sequence.forEach((stop, i) => {
       const isEndpoint = i === 0 || i === sequence.length - 1;
-      const color = isEndpoint ? '#8b5cf6' : '#f59e0b';
-      
       const marker = new google.maps.Marker({
-        map,
-        position: stop.location,
-        label: isEndpoint ? undefined : { text: String(i), color: '#0f172a', fontWeight: 'bold', fontSize: '11px' },
+        map, position: stop.location,
+        label: isEndpoint ? undefined : { text: String(i), color: '#0f172a', fontWeight: 'bold' },
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          fillColor: color, fillOpacity: 1,
-          strokeColor: '#fff', strokeWeight: 2,
-          scale: isEndpoint ? 9 : 13
+          fillColor: isEndpoint ? '#8b5cf6' : '#f59e0b', fillOpacity: 1,
+          strokeColor: '#fff', strokeWeight: 2, scale: isEndpoint ? 9 : 13
         }
       });
-
-      let infoContent = `<div style="color:#0f172a;padding:5px;max-width:220px;">`;
-      if (stop.photos && stop.photos.length > 0) {
-        infoContent += `<img src="${stop.photos[0].getUrl({ maxWidth: 300 })}" style="width:100%;border-radius:6px;margin-bottom:6px;display:block;">`;
-      }
-      infoContent += `<strong>${stop.label}</strong></div>`;
-      const iw = new google.maps.InfoWindow({ content: infoContent });
-      marker.addListener('click', () => iw.open(map, marker));
       poiMarkers.push(marker);
       bounds.extend(stop.location);
     });
@@ -400,36 +386,24 @@ async function focusDayTour(day) {
     map.fitBounds(bounds);
     if (map.getZoom() > 14) map.setZoom(14);
 
-    // 6. Calcola e disegna i tratti (legs)
     let totalMeters = 0;
     let totalSeconds = 0;
     const finalLegs = [];
 
-    // Usiamo le "legs" fornite dal risultato ottimizzato di Google
     route.legs.forEach((leg, i) => {
       totalMeters += leg.distance.value;
       totalSeconds += leg.duration.value;
-      
       finalLegs.push({
-        from: sequence[i].label,
-        to: sequence[i+1].label,
-        distText: leg.distance.text,
-        durText: leg.duration.text,
-        path: leg.steps.flatMap(s => s.path)
+        from: sequence[i].label, to: sequence[i+1].label,
+        distText: leg.distance.text, durText: leg.duration.text
       });
 
-      const colors = ['#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981'];
       const poly = new google.maps.Polyline({
-        path: leg.steps.flatMap(s => s.path),
-        map,
-        strokeColor: colors[i % colors.length],
-        strokeWeight: 4, strokeOpacity: 0.9,
-        geodesic: true
+        path: leg.steps.flatMap(s => s.path), map,
+        strokeColor: ['#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981'][i % 7],
+        strokeWeight: 4, strokeOpacity: 0.9, geodesic: true
       });
-      
       poly.addListener('click', () => highlightLegPanel(i));
-      poly.addListener('mouseover', () => poly.setOptions({ strokeWeight: 7, strokeOpacity: 1 }));
-      poly.addListener('mouseout', () => poly.setOptions({ strokeWeight: 4, strokeOpacity: 0.9 }));
       currentDayPolylines.push(poly);
     });
 
