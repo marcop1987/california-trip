@@ -368,6 +368,8 @@ async function focusDayTour(day) {
 
     // 4. Markers e Visualizzazione
     const bounds = new google.maps.LatLngBounds();
+    const infoWindows = [];
+
     sequence.forEach((stop, i) => {
       const isEndpoint = i === 0 || i === sequence.length - 1;
       const marker = new google.maps.Marker({
@@ -379,6 +381,18 @@ async function focusDayTour(day) {
           strokeColor: '#fff', strokeWeight: 2, scale: isEndpoint ? 9 : 13
         }
       });
+
+      let infoContent = `<div style="color:#0f172a;padding:5px;max-width:220px;">`;
+      if (stop.photos && stop.photos.length > 0) {
+        infoContent += `<img src="${stop.photos[0].getUrl({ maxWidth: 300 })}" style="width:100%;border-radius:6px;margin-bottom:6px;display:block;">`;
+      }
+      infoContent += `<strong>${stop.label}</strong></div>`;
+      const iw = new google.maps.InfoWindow({ content: infoContent });
+      marker.addListener('click', () => {
+        infoWindows.forEach(w => w.close());
+        iw.open(map, marker);
+      });
+      infoWindows.push(iw);
       poiMarkers.push(marker);
       bounds.extend(stop.location);
     });
@@ -393,9 +407,15 @@ async function focusDayTour(day) {
     route.legs.forEach((leg, i) => {
       totalMeters += leg.distance.value;
       totalSeconds += leg.duration.value;
+      
+      const fromLabel = sequence[i].label;
+      const toLabel = sequence[i+1].label;
+      
       finalLegs.push({
-        from: sequence[i].label, to: sequence[i+1].label,
-        distText: leg.distance.text, durText: leg.duration.text
+        from: fromLabel, to: toLabel,
+        fromIdx: i, toIdx: i + 1,
+        distText: leg.distance.text, durText: leg.duration.text,
+        location: sequence[i+1].location
       });
 
       const poly = new google.maps.Polyline({
@@ -403,7 +423,11 @@ async function focusDayTour(day) {
         strokeColor: ['#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#3b82f6', '#10b981'][i % 7],
         strokeWeight: 4, strokeOpacity: 0.9, geodesic: true
       });
-      poly.addListener('click', () => highlightLegPanel(i));
+      poly.addListener('click', () => {
+        highlightLegPanel(i);
+        map.panTo(sequence[i+1].location);
+        google.maps.event.trigger(poiMarkers[i+1], 'click');
+      });
       currentDayPolylines.push(poly);
     });
 
@@ -421,7 +445,6 @@ function renderRoutePanel(dayNum, legs, totalMeters, totalSeconds) {
   const card = document.getElementById(`day-card-${dayNum}`);
   if (!card) return;
 
-  // Rimuovi pannello precedente se esiste
   const existing = card.querySelector('.route-panel');
   if (existing) existing.remove();
 
@@ -431,17 +454,18 @@ function renderRoutePanel(dayNum, legs, totalMeters, totalSeconds) {
   const totalTimeStr = totalH > 0 ? `${totalH}h ${totalMin}min` : `${totalMin}min`;
 
   let legsHTML = legs.map((leg, i) => {
-    const fromShort = leg.from.replace('Partenza: ', '').replace('Arrivo: ', '').split(',')[0];
-    const toShort = leg.to.replace('Partenza: ', '').replace('Arrivo: ', '').split(',')[0];
-    const isStart = leg.from.includes('Partenza');
-    const isEnd = leg.to.includes('Arrivo');
+    const fromName = leg.from.replace('🏨 ', '').replace('📍 ', '').split(',')[0];
+    const toName = leg.to.replace('🏨 ', '').replace('📍 ', '').split(',')[0];
+    
+    const fromNum = leg.from.startsWith('🏨') ? '🏠' : leg.fromIdx;
+    const toNum = leg.to.startsWith('🏨') ? '🏠' : leg.toIdx;
 
     return `
-      <div class="route-leg" id="leg-${dayNum}-${i}" onclick="highlightLegPanel(${i})">
+      <div class="route-leg" id="leg-${dayNum}-${i}" onclick="highlightLegPanel(${i}); map.panTo({lat: ${leg.location.lat()}, lng: ${leg.location.lng()}}); google.maps.event.trigger(poiMarkers[${i+1}], 'click')">
         <div class="leg-stops">
-          <span class="leg-from">${isStart ? '🏨' : '📍'} ${fromShort}</span>
+          <span class="leg-from"><small>${fromNum}.</small> ${fromName}</span>
           <span class="leg-arrow">→</span>
-          <span class="leg-to">${isEnd ? '🏨' : '📍'} ${toShort}</span>
+          <span class="leg-to"><small>${toNum}.</small> ${toName}</span>
         </div>
         <div class="leg-meta">
           <span class="leg-dist">🛣 ${leg.distText}</span>
@@ -460,7 +484,6 @@ function renderRoutePanel(dayNum, legs, totalMeters, totalSeconds) {
       <div class="total-time">⏱ Guida Totale: ~${totalTimeStr}</div>
     </div>
   `;
-
   card.appendChild(panel);
 }
 
