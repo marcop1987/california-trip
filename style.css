@@ -185,13 +185,25 @@ body {
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  height: 240px;
+  height: 280px;
   background: var(--bg);
+  transition: height 0.3s ease;
+}
+.chat-section.collapsed {
+  height: 40px;
 }
 .chat-header {
   display: flex; align-items: center; gap: 6px;
   padding: 10px 14px; border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+#chat-toggle-icon {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.3s;
+}
+.collapsed #chat-toggle-icon {
+  transform: rotate(-90deg);
 }
 .chat-messages {
   flex: 1;
@@ -200,6 +212,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.collapsed .chat-messages, .collapsed .chat-input-row {
+  display: none;
 }
 .chat-msg {
   max-width: 88%;

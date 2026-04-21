@@ -517,6 +517,12 @@ async function sendChatMessage() {
 function initChat() {
   const input = document.getElementById('chat-input');
   input.addEventListener('keydown', e => { if (e.key === 'Enter') sendChatMessage(); });
+
+  const toggle = document.getElementById('chat-toggle');
+  const chatSection = document.getElementById('chat-section');
+  toggle.addEventListener('click', () => {
+    chatSection.classList.toggle('collapsed');
+  });
 }
 
 // Boot up e Autenticazione
