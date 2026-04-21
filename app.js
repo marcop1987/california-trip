@@ -527,12 +527,19 @@ async function sendChatMessage() {
 
   try {
     const { data, error } = await sb.functions.invoke('gemini-chat', { body: { message: msg, tripData } });
-    document.getElementById('chat-typing').remove();
-    if (error || !data) throw new Error('Errore risposta');
+    
+    const typingIndicator = document.getElementById('chat-typing');
+    if (typingIndicator) typingIndicator.remove();
+
+    if (error) throw error;
+    if (!data || !data.reply) throw new Error('Risposta vuota dall\'IA');
+
     messagesEl.innerHTML += `<div class="chat-msg assistant">${data.reply}</div>`;
   } catch(e) {
-    document.getElementById('chat-typing').remove();
-    messagesEl.innerHTML += `<div class="chat-msg assistant" style="color:#ef4444">Errore di connessione. Riprova.</div>`;
+    console.error("Errore Chat:", e);
+    const typingIndicator = document.getElementById('chat-typing');
+    if (typingIndicator) typingIndicator.remove();
+    messagesEl.innerHTML += `<div class="chat-msg assistant" style="color:#ef4444">⚠️ Gemini non risponde: ${e.message || 'Errore di connessicatione'}. Verifica il deploy delle funzioni.</div>`;
   }
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
