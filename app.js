@@ -11,6 +11,7 @@ let currentDayPolylines = [];
 let placesService, geocoder;
 let poiMarkers = [], hotelMarkers = [], nearbyMarkers = [];
 let activeNearbyTypes = new Set();
+let searchPin = null;
 
 // Mappa mesi italiani per parsing date
 const MONTH_MAP = {
@@ -534,49 +535,63 @@ function clearNearbyMarkers(type) {
   });
 }
 
-async function searchNearby(type) {
+async function searchNearby(type, location) {
   if (!map) return;
   
-  const center = map.getCenter();
+  const searchLocation = location || (searchPin ? searchPin.getPosition() : map.getCenter());
   const query = type === 'supermarket' ? 'supermarket' : 'vegetarian restaurant';
   
   const request = {
-    location: center,
-    radius: '10000', // 10km radius
+    location: searchLocation,
+    radius: '5000', // Ridotto a 5km per precisione intorno al pin
     keyword: query
   };
 
-  placesService.nearbySearch(request, (results, status) => {
-    if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-      results.forEach(place => {
-        const marker = new google.maps.Marker({
-          map: map,
-          position: place.geometry.location,
-          title: place.name,
-          _type: type,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            fillColor: type === 'supermarket' ? '#10b981' : '#ec4899', // Emerald for supermarket, Pink for Veggie
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 1,
-            scale: 6
-          }
-        });
+  return new Promise((resolve) => {
+    placesService.nearbySearch(request, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+        results.forEach(place => {
+          const marker = new google.maps.Marker({
+            map: map,
+            position: place.geometry.location,
+            title: place.name,
+            _type: type,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: type === 'supermarket' ? '#10b981' : '#ec4899',
+              fillOpacity: 1,
+              strokeColor: '#fff',
+              strokeWeight: 1,
+              scale: 6
+            }
+          });
 
-        const iw = new google.maps.InfoWindow({
-          content: `<div style="color:#0f172a;padding:5px;">
-            <strong>${type === 'supermarket' ? '🛒' : '🥗'} ${place.name}</strong><br>
-            <small>${place.vicinity}</small><br>
-            <small>Rating: ${place.rating || 'N/A'} ⭐</small>
-          </div>`
-        });
+          const iw = new google.maps.InfoWindow({
+            content: `<div style="color:#0f172a;padding:5px;">
+              <strong>${type === 'supermarket' ? '🛒' : '🥗'} ${place.name}</strong><br>
+              <small>${place.vicinity}</small><br>
+              <small>Rating: ${place.rating || 'N/A'} ⭐</small>
+            </div>`
+          });
 
-        marker.addListener('click', () => iw.open(map, marker));
-        nearbyMarkers.push(marker);
-      });
-    }
+          marker.addListener('click', () => iw.open(map, marker));
+          nearbyMarkers.push(marker);
+        });
+      }
+      resolve();
+    });
   });
+}
+
+function clearSearchPin() {
+  if (searchPin) {
+    searchPin.setMap(null);
+    searchPin = null;
+  }
+  // Opzionalmente puliamo anche i risultati della ricerca se togliamo il pin
+  activeNearbyTypes.forEach(type => clearNearbyMarkers(type));
+  activeNearbyTypes.clear();
+  document.querySelectorAll('.btn-explore').forEach(b => b.classList.remove('active'));
 }
 
 function initExplore() {
@@ -586,9 +601,39 @@ function initExplore() {
   if (smBtn) smBtn.onclick = () => toggleNearbyPlaces('supermarket');
   if (vgBtn) vgBtn.onclick = () => toggleNearbyPlaces('vegetarian');
 
-  // Aggiorna la ricerca se l'utente sposta la mappa e i toggle sono attivi
-  map.addListener('idle', () => {
+  // Click sulla mappa per mettere un pin e cercare intorno
+  map.addListener('click', (e) => {
+    if (searchPin) searchPin.setMap(null);
+    
+    searchPin = new google.maps.Marker({
+      position: e.latLng,
+      map: map,
+      animation: google.maps.Animation.DROP,
+      icon: {
+        url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+      }
+    });
+
+    const iw = new google.maps.InfoWindow({
+      content: `<div style="color:#0f172a;padding:5px;text-align:center;">
+        <strong>Punto di Ricerca</strong><br>
+        <button onclick="clearSearchPin()" style="margin-top:5px;cursor:pointer;font-size:10px;padding:2px 6px;">Rimuovi Pin</button>
+      </div>`
+    });
+    
+    searchPin.addListener('click', () => iw.open(map, searchPin));
+    
+    // Se ci sono toggle attivi, ricarica subito la ricerca intorno al nuovo pin
     if (activeNearbyTypes.size > 0) {
+      refreshNearbyPlaces();
+    } else {
+      iw.open(map, searchPin);
+    }
+  });
+
+  // Aggiorna la ricerca se l'utente sposta la mappa e i toggle sono attivi (solo se NON c'è un pin)
+  map.addListener('idle', () => {
+    if (activeNearbyTypes.size > 0 && !searchPin) {
       refreshNearbyPlaces();
     }
   });
