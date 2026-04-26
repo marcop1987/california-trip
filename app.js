@@ -9,7 +9,8 @@ const CSV_FILE = 'https://docs.google.com/spreadsheets/d/1SMHpzRTFtoo7qhWWKOH-2y
 let map, tripData = [], directionsService, directionsRenderer, dayDirectionsRenderer;
 let currentDayPolylines = [];
 let placesService, geocoder;
-let poiMarkers = [], hotelMarkers = [];
+let poiMarkers = [], hotelMarkers = [], nearbyMarkers = [];
+let activeNearbyTypes = new Set();
 
 // Mappa mesi italiani per parsing date
 const MONTH_MAP = {
@@ -487,6 +488,112 @@ function renderRoutePanel(dayNum, legs, totalMeters, totalSeconds) {
   card.appendChild(panel);
 }
 
+// Nearby Places Logic
+async function toggleNearbyPlaces(type) {
+  const btn = document.getElementById(type === 'supermarket' ? 'toggle-supermarkets' : 'toggle-veggie');
+  
+  if (activeNearbyTypes.has(type)) {
+    // Se è già attivo, lo disattiviamo (comportamento toggle)
+    // MA se l'utente vuole ricaricare la zona attuale, potremmo aggiungere un tasto refresh.
+    // Per semplicità, il secondo click disattiva. 
+    // Aggiungiamo un listener per ricaricare quando la mappa si ferma (idle)
+    activeNearbyTypes.delete(type);
+    btn.classList.remove('active');
+    clearNearbyMarkers(type);
+  } else {
+    activeNearbyTypes.add(type);
+    btn.classList.add('active');
+    
+    // Mostra caricamento sul bottone
+    const originalText = btn.innerText;
+    btn.innerText = '⌛...';
+    
+    await searchNearby(type);
+    
+    btn.innerText = originalText;
+  }
+}
+
+// Aggiungiamo una funzione per ricaricare i marker quando la mappa viene spostata
+function refreshNearbyPlaces() {
+  if (activeNearbyTypes.size === 0) return;
+  
+  activeNearbyTypes.forEach(type => {
+    clearNearbyMarkers(type);
+    searchNearby(type);
+  });
+}
+
+function clearNearbyMarkers(type) {
+  nearbyMarkers = nearbyMarkers.filter(m => {
+    if (m._type === type) {
+      m.setMap(null);
+      return false;
+    }
+    return true;
+  });
+}
+
+async function searchNearby(type) {
+  if (!map) return;
+  
+  const center = map.getCenter();
+  const query = type === 'supermarket' ? 'supermarket' : 'vegetarian restaurant';
+  
+  const request = {
+    location: center,
+    radius: '10000', // 10km radius
+    keyword: query
+  };
+
+  placesService.nearbySearch(request, (results, status) => {
+    if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+      results.forEach(place => {
+        const marker = new google.maps.Marker({
+          map: map,
+          position: place.geometry.location,
+          title: place.name,
+          _type: type,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: type === 'supermarket' ? '#10b981' : '#ec4899', // Emerald for supermarket, Pink for Veggie
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 1,
+            scale: 6
+          }
+        });
+
+        const iw = new google.maps.InfoWindow({
+          content: `<div style="color:#0f172a;padding:5px;">
+            <strong>${type === 'supermarket' ? '🛒' : '🥗'} ${place.name}</strong><br>
+            <small>${place.vicinity}</small><br>
+            <small>Rating: ${place.rating || 'N/A'} ⭐</small>
+          </div>`
+        });
+
+        marker.addListener('click', () => iw.open(map, marker));
+        nearbyMarkers.push(marker);
+      });
+    }
+  });
+}
+
+function initExplore() {
+  const smBtn = document.getElementById('toggle-supermarkets');
+  const vgBtn = document.getElementById('toggle-veggie');
+  
+  if (smBtn) smBtn.onclick = () => toggleNearbyPlaces('supermarket');
+  if (vgBtn) vgBtn.onclick = () => toggleNearbyPlaces('vegetarian');
+
+  // Aggiorna la ricerca se l'utente sposta la mappa e i toggle sono attivi
+  map.addListener('idle', () => {
+    if (activeNearbyTypes.size > 0) {
+      refreshNearbyPlaces();
+    }
+  });
+}
+
 // AI Optimizer Logic tramite Gemini API
 async function analyzeItinerary() {
   const optimizerEl = document.getElementById('ai-optimizer');
@@ -583,6 +690,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       initMap();
       loadData();
       initChat();
+      initExplore();
     } else {
       authError.classList.remove('hidden');
       authError.innerText = "Accesso Negato. L'email " + userEmail + " non è autorizzata.";
