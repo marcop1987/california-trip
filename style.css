@@ -56,6 +56,31 @@ body {
 }
 .btn-logout:hover { background: var(--surface-hover); color: var(--text); }
 
+.btn-refresh-mini {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  transition: all 0.3s ease;
+  opacity: 0.7;
+}
+.btn-refresh-mini:hover {
+  opacity: 1;
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+.btn-refresh-mini.loading {
+  animation: rotate 1s linear infinite;
+}
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ─── Legend ─── */
 .map-legend {
   display: flex; gap: 12px; padding: 8px 24px;

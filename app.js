@@ -20,6 +20,8 @@ const MONTH_MAP = {
   'settembre':'09','ottobre':'10','novembre':'11','dicembre':'12'
 };
 
+const PIN_PATH = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z";
+
 function parseItalianDate(dateStr) {
   const parts = dateStr.toLowerCase().split(' ');
   let day, month;
@@ -558,16 +560,18 @@ async function searchNearby(type, location) {
           _type: type,
           label: {
             text: type === 'supermarket' ? '🛒' : '🥗',
-            fontSize: '12px'
+            fontSize: '13px',
+            color: 'white'
           },
           icon: {
-            path: google.maps.SymbolPath.CIRCLE,
+            path: PIN_PATH,
             fillColor: type === 'supermarket' ? '#10b981' : '#f472b6',
             fillOpacity: 1,
             strokeColor: '#FFFFFF',
             strokeWeight: 2,
-            scale: 15,
-            labelOrigin: new google.maps.Point(0, 0)
+            scale: 1.8,
+            labelOrigin: new google.maps.Point(12, 9),
+            anchor: new google.maps.Point(12, 22)
           }
         });
 
@@ -614,13 +618,15 @@ function initExplore() {
       position: e.latLng,
       map: map,
       animation: google.maps.Animation.DROP,
+      label: { text: '🎯', fontSize: '14px' },
       icon: {
-        path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
+        path: PIN_PATH,
         fillColor: '#3b82f6',
         fillOpacity: 1,
         strokeColor: '#fff',
         strokeWeight: 2,
-        scale: 2,
+        scale: 2.2,
+        labelOrigin: new google.maps.Point(12, 9),
         anchor: new google.maps.Point(12, 22)
       }
     });
@@ -762,4 +768,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     await sb.auth.signOut();
     window.location.reload();
   });
+
+  // Tasto Refresh Dati
+  const refreshBtn = document.getElementById('refresh-data-btn');
+  if (refreshBtn) {
+    refreshBtn.onclick = async () => {
+      refreshBtn.classList.add('loading');
+      
+      // Pulisci mappa prima di ricaricare
+      if (directionsRenderer) directionsRenderer.setDirections({ routes: [] });
+      if (dayDirectionsRenderer) dayDirectionsRenderer.setDirections({ routes: [] });
+      poiMarkers.forEach(m => m.setMap(null));
+      hotelMarkers.forEach(m => m.setMap(null));
+      poiMarkers = [];
+      hotelMarkers = [];
+      
+      loadData();
+      
+      setTimeout(() => {
+        refreshBtn.classList.remove('loading');
+      }, 1000);
+    };
+  }
 });
