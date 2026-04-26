@@ -552,19 +552,24 @@ async function searchNearby(type, location) {
       if (status === google.maps.places.PlacesServiceStatus.OK && results) {
         results.forEach(place => {
           const marker = new google.maps.Marker({
-            map: map,
-            position: place.geometry.location,
-            title: place.name,
-            _type: type,
-            icon: {
-              path: google.maps.SymbolPath.CIRCLE,
-              fillColor: type === 'supermarket' ? '#10b981' : '#ec4899',
-              fillOpacity: 1,
-              strokeColor: '#fff',
-              strokeWeight: 1,
-              scale: 6
-            }
-          });
+          map: map,
+          position: place.geometry.location,
+          title: place.name,
+          _type: type,
+          label: {
+            text: type === 'supermarket' ? '🛒' : '🥗',
+            fontSize: '12px'
+          },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: type === 'supermarket' ? '#10b981' : '#f472b6',
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 2,
+            scale: 15,
+            labelOrigin: new google.maps.Point(0, 0)
+          }
+        });
 
           const iw = new google.maps.InfoWindow({
             content: `<div style="color:#0f172a;padding:5px;">
@@ -610,7 +615,13 @@ function initExplore() {
       map: map,
       animation: google.maps.Animation.DROP,
       icon: {
-        url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+        path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
+        fillColor: '#3b82f6',
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+        scale: 2,
+        anchor: new google.maps.Point(12, 22)
       }
     });
 
